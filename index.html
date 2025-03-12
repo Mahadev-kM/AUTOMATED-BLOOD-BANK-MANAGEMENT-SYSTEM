@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blood Stock Availability in India</title>
+    <link rel="stylesheet" href="index.css">
+
+    <!-- Leaflet CSS (for OpenStreetMap) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css">
+
+    <style>
+        /* Map Styling */
+        #map {
+    width: 100%;  /* Ensure full width */
+    height: 700px; /* Increase height */
+    margin-top: 20px;
+    border-radius: 8px;
+}
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Blood Stock Availability in Karnataka</h1>
+
+        <div class="search-box">
+            <h2>Search Blood Stock</h2>
+            <div class="filters">
+                <select id="state">
+                    <option value="Karnataka" selected>Karnataka</option>
+                </select>
+                
+                <select id="district">
+                    <option>Select District</option>
+                    <option>Bangalore </option>
+                    <option>Bagalkot</option>
+                    <option>Ballari</option>
+                    <option>Belagavi</option>
+                    <option>Bidar</option>
+                    <option>Chamarajanagar</option>
+                    <option>Chikkaballapur</option>
+                    <option>Chikkamagaluru</option>
+                    <option>Chitradurga</option>
+                    <option>Belgaum</option>
+                    <option>Dakshina Kannada</option>
+                    <option>Davanagere</option>
+                    <option>Dharwad</option>
+                    <option>Gadag</option>
+                    <option>Hassan</option>
+                    <option>Haveri</option>
+                    <option>Kalaburagi</option>
+                    <option>Kodagu</option>
+                    <option>Kolar</option>
+                    <option>Koppal</option>
+                    <option>Mandya</option>
+                    <option>Mysuru</option>
+                    <option>Raichur</option>
+                    <option>Ramanagara</option>
+                    <option>Shivamogga</option>
+                    <option>Tumakuru</option>
+                    <option>Udupi</option>
+                    <option>Uttara Kannada</option>
+                    <option>Vijayapura</option>
+                    <option>Yadgir</option>
+                </select>
+                
+                <select id="blood-group">
+                    <option>All Blood Groups</option>
+                    <option value="A+">A+</option>
+                    <option value="A-">A-</option>
+                    <option value="B+">B+</option>
+                    <option value="B-">B-</option>
+                    <option value="O+">O+</option>
+                    <option value="O-">O-</option>
+                    <option value="AB+">AB+</option>
+                    <option value="AB-">AB-</option>
+                </select>
+                
+                <select id="blood-type">
+                    <option>Whole Blood</option>
+                    <option>Plasma</option>
+                </select>
+                <button class="search-btn" onclick="searchBloodBanks()">Search</button>
+            </div>
+        </div>
+        <div class="map-container">
+            <div id="map"></div>
+        </div>        
+        <div class="results">
+            <h3>Select State and/or District for stock availability.</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>S.No.</th>
+                        <th>Blood Bank</th>
+                        <th>BloodType</th>
+                        <th>Availability</th>
+                        <th>Last Updated</th>
+                        <th>Distance</th>
+                    </tr>
+                </thead>
+                <tbody id="results-table">
+                    <!-- Data will be inserted dynamically -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Map Section -->
+        <h2>Nearby Blood Banks in Karnataka</h2>
+        <div id="map"></div>
+    </div>
+
+    <!-- Leaflet JS (for OpenStreetMap) -->
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <script>
+        // Set India's Boundaries
+        var indiaBounds = [
+            [6.4627, 68.1097],  // Southwest corner
+            [35.5133, 97.3956]  // Northeast corner
+        ];
+
+        // Initialize Map Focused on India
+        var map = L.map('map', {
+            center: [22.3511, 78.6677], // Center of India
+            zoom: 5,
+            maxBounds: indiaBounds, // Restrict map movement
+            maxBoundsViscosity: 1.0
+        });
+
+        // Add OpenStreetMap Layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+       
+        async function searchBloodBanks() {
+    const state = document.getElementById("state").value;
+    const district = document.getElementById("district").value;
+    const bloodGroup = document.getElementById("blood-group").value;
+    const resultsTable = document.getElementById("results-table");
+
+    // Clear previous results and map markers
+    resultsTable.innerHTML = "";
+    map.eachLayer((layer) => {
+        if (layer instanceof L.Marker) {
+            map.removeLayer(layer);
+        }
+    });
+
+    try {
+        const response = await fetch(`http://localhost:5000/blood-banks?state=${state}&district=${district}&bloodType=${bloodGroup}`);
+        const bloodBanks = await response.json();
+
+        if (bloodBanks.length === 0) {
+            alert("No blood banks found!");
+            return;
+        }
+
+        // Get User Location
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                async (position) => {
+                    const userLat = position.coords.latitude;
+                    const userLon = position.coords.longitude;
+
+                    // Sort Blood Banks by Distance
+                    bloodBanks.forEach((bank) => {
+                        bank.distance = getDistance(userLat, userLon, bank.lat, bank.lon);
+                    });
+
+                    bloodBanks.sort((a, b) => a.distance - b.distance);
+
+                    bloodBanks.forEach((bank, index) => {
+                        // Add Row to Table
+                        let row = `<tr>
+                            <td>${index + 1}</td>
+                            <td>${bank.name}</td>
+                            <td>${bank.bloodType}</td>
+                            <td>Available</td>
+                            <td>Today</td>
+                            <td>${bank.distance.toFixed(2)} km</td>
+                        </tr>`;
+                        resultsTable.innerHTML += row;
+
+                        // Add Marker to Map
+                        let marker = L.marker([bank.lat, bank.lon])
+                            .addTo(map)
+                            .bindPopup(`<b>${bank.name}</b><br>Distance: ${bank.distance.toFixed(2)} km`)
+                            .openPopup();
+
+                        if (index === 0) {
+                            // Show route to the nearest blood bank
+                            showRoute(userLat, userLon, bank.lat, bank.lon);
+                        }
+                    });
+
+                    // Center Map on User Location
+                    map.setView([userLat, userLon], 10);
+                    L.marker([userLat, userLon], { icon: L.icon({ iconUrl: 'https://cdn-icons-png.flaticon.com/512/684/684908.png', iconSize: [40, 40] }) })
+                        .addTo(map)
+                        .bindPopup("Your Location")
+                        .openPopup();
+                },
+                (error) => {
+                    console.error("Error fetching location:", error);
+                    alert("Failed to fetch your location!");
+                }
+            );
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    } catch (error) {
+        console.error("Error fetching data:", error);
+    }
+}
+
+// Haversine Formula to Calculate Distance Between Two Coordinates
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Radius of Earth in km
+    const dLat = (lat2 - lat1) * (Math.PI / 180);
+    const dLon = (lon2 - lon1) * (Math.PI / 180);
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+// Function to Show Route on Map
+function showRoute(startLat, startLon, endLat, endLon) {
+    const routeUrl = `https://router.project-osrm.org/route/v1/driving/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`;
+
+    fetch(routeUrl)
+        .then(response => response.json())
+        .then(data => {
+            const route = data.routes[0].geometry;
+            const routeLayer = L.geoJSON(route, { color: 'blue', weight: 5 }).addTo(map);
+        })
+        .catch(error => console.error("Error fetching route:", error));
+}
+
+    </script>
+</body>
+<footer style="background-color: #8B0000; color: white; text-align: center; padding: 10px; position: fixed; bottom: 0; width: 100%;">
+    <marquee behavior="scroll" direction="left" scrollamount="5" style="font-size: 16px; font-weight: bold;">
+        "A single drop of blood can make a huge difference. Donate blood, save lives!"
+    </marquee>
+</footer>
+
+</html>
